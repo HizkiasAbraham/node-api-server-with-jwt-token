@@ -25,7 +25,6 @@ const opts = {
 };
 
 module.exports = new Strategy(opts, (payload, done) => {
-  console.log('The payload is ', payload);
   User.findById(payload.id)
     .then((userFound) => {
       if (userFound) {
@@ -88,13 +87,13 @@ router.get('/', verifyAuth.isLoggedIn, (req, res) => {
 - Clone the repository
 
 ```bash
-git clone https://github.com/HizkiasAbraham/authentication_with_jwt_in_express_js.git
+git clone https://github.com/HizkiasAbraham/node-api-server-with-jwt-token.git
 ```
 
 - Now navigate to the cloned directory
 
 ```bash
-cd authentication_with_jwt_in_express_js
+cd node-api-server-with-jwt-token
 ```
 
 - Install the dependencies required

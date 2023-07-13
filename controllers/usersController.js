@@ -1,118 +1,88 @@
 const User = require('../models/User');
 
-
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('../config/constants');
 const { validationResult } = require('express-validator');
+const { successResponse, errorResponse } = require('../utils/httpResponse');
 
 module.exports = {
+  // handles /users/signup route
+  signup: async (req, res) => {
+    const errors = validationResult(req);
 
-    // handles /get
-    home: (req, res) => {
-        let page = req.query.page;
-        let size = req.query.size;
-
-        if (page == undefined || page < 0 || page == 0) {
-            page = 1
-        }
-        if (size == undefined || page < 0 || page == 0) {
-            size = 2
-        }
-        let query = { skip: size * (page - 1), limit: size };
-        console.log('The query is ', query);
-        User.find({}, {}, query)
-            .then(
-                users => {
-                    console.log(users);
-                    res.json(users)
-                }
-            )
-            .catch(
-                err => res.status(500).json({ messag: 'Error while fetching users data' })
-            )
-    },
-
-    // handles /users/signup route
-    signup: (req, res) => {
-        const errors = validationResult(req);
-
-        if (!errors.isEmpty()) {
-            res.status(422).json({ errors: errors.array() });
-        }
-        else {
-            let newUser = {
-                name: req.body.name,
-                email: req.body.email,
-                username: req.body.username,
-                password: req.body.password
-            };
-
-            bcrypt.genSalt(10)
-                .then(
-                    salt => {
-                        bcrypt.hash(newUser.password, salt)
-                            .then(
-                                hash => {
-                                    newUser.password = hash;
-                                    User.create(newUser)
-                                        .then(
-                                            user => {
-                                                let { password, ...updatedUser } = user._doc;
-                                                res.status(200).json({ user: updatedUser });
-                                            }
-                                        )
-                                        .catch(
-                                            err => {
-                                                console.log(err)
-                                            }
-                                        )
-                                }
-                            )
-                            .catch(
-                                err => res.status(500).json({ message: 'Internal error while creating your account' })
-                            )
-                    }
-                )
-                .catch(
-                    err => res.status(500).json({ message: 'Internal server error while creating your account' })
-                );
-        }
-    },
-
-    // handles login
-
-    login: (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            res.status(422).json({ errors: errors.array() })
-        }
-        else {
-            User.findOne({ email: req.body.email })
-                .then(
-                    user => {
-                        if (user) {
-                            // res.status(200).json({token: jwt.sign()});
-                            bcrypt.compare(req.body.password, user.password)
-                                .then(
-                                    isMatch => {
-                                        if (isMatch) {
-                                            //  jwt.sign()
-                                            console.log('the user id is ', user._id);
-                                            let token = jwt.sign({ id: user._id }, config.jwtSecret);
-                                            res.status(200).json({ token })
-                                        }
-                                        else {
-                                            res.status(401).json({ message: 'Incalid userame or password' })
-                                        }
-                                    }
-                                )
-                        }
-                        else {
-                            res.status(401).json({ message: 'Invalid username or password' })
-                        }
-                    }
-                );
-        }
+    if (!errors.isEmpty()) {
+      return errorResponse(res, config.httpStatus.UNPROCCECABLE, {
+        errors: errors.array(),
+      });
     }
-}
+    try {
+      const newUser = {
+        name: req.body.name,
+        email: req.body.email,
+        username: req.body.username,
+        password: req.body.password,
+      };
+      const salt = await bcrypt.genSalt();
+      const hash = await bcrypt.hash(newUser.password, salt);
+
+      newUser.password = hash;
+      const userCreated = await User.create(newUser);
+      const { password, ...createdUser } = userCreated._doc;
+      return successResponse(res, config.httpStatus.CREATED, {
+        data: createdUser,
+      });
+    } catch (error) {
+      return errorResponse(res, config.httpStatus.INTERNAL_SERVER_PROBLEM, {
+        erros: { msg: 'Internal server problem' },
+      });
+    }
+  },
+
+  // handles login
+
+  login: async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return errorResponse(res, config.httpStatus.UNPROCCECABLE, {
+        errors: errors.array(),
+      });
+    }
+    const { email, password } = req.body;
+    try {
+      const user = await User.findOne({ email });
+      if (!user)
+        return errorResponse(res, config.httpStatus.UNAUTORIZED, {
+          errors: {
+            msg: 'Invalid username or password',
+          },
+        });
+
+      const isPasswordMatch = await bcrypt.compare(password, user.password);
+      if (!isPasswordMatch)
+        return errorResponse(res, config.httpStatus.UNAUTORIZED, {
+          errors: {
+            msg: 'Invalid username or password',
+          },
+        });
+
+      const token = jwt.sign({ id: user._id }, config.jwtSecret);
+
+      return successResponse(res, config.httpStatus.OK, { data: { token } });
+    } catch (error) {
+      return errorResponse(res, config.httpStatus.INTERNAL_SERVER_PROBLEM, {
+        erros: { msg: 'Internal server problem' },
+      });
+    }
+  },
+  protected: (req, res) => {
+    successResponse(res, config.httpStatus.OK, {
+      message: 'You are logged in',
+    });
+  },
+  adminAccess: (req, res) => {
+    successResponse(res, config.httpStatus.OK, {
+      message: 'Admin access success',
+    });
+  },
+};
